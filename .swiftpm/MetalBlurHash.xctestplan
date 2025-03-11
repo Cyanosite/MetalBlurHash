@@ -1,0 +1,24 @@
+{
+  "configurations" : [
+    {
+      "id" : "D0CB3D54-3DC8-4CB4-9AE5-66526FE36E4D",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "codeCoverage" : false
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:",
+        "identifier" : "MetalBlurHashTests",
+        "name" : "MetalBlurHashTests"
+      }
+    }
+  ],
+  "version" : 1
+}
