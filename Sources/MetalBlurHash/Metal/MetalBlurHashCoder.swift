@@ -1,0 +1,365 @@
+//
+//  MetalBlurHashCoder.swift
+//  MetalBlurHash
+//
+//  Created by Zsombor Szenyán on 2025. 03. 08..
+//
+
+import UIKit
+import simd
+
+final class MetalBlurHashCoder: BlurHashCoder {
+    private struct EncodeParams {
+        let width: UInt32
+        let height: UInt32
+        let bytesPerRow: UInt32
+        let cx: UInt32
+        let cy: UInt32
+    }
+    
+    // MARK: - Metal encode
+    static func encode(_ image: UIImage, numberOfComponents components: (Int, Int)) -> String? {
+        guard components <= (9, 9) else { return nil }
+        
+        // MARK: Metal encode init
+        let device: MTLDevice? = MTLCreateSystemDefaultDevice()
+        let library: MTLLibrary? = try? device?.makeDefaultLibrary(bundle: Bundle.module)
+        let function: MTLFunction? = library?.makeFunction(name: "encodeBlurHash")
+        
+        guard let device, let function else {
+            return fallbackEncode(image, numberOfComponents: components)
+        }
+        
+        let pipelineState: MTLComputePipelineState? = try? device.makeComputePipelineState(function: function)
+        let commandQueue: MTLCommandQueue? = device.makeCommandQueue()
+        
+        guard let pipelineState, let commandQueue else {
+            return fallbackEncode(image, numberOfComponents: components)
+        }
+        
+        let pixelWidth: Int = Int(round(image.size.width * image.scale))
+        let pixelHeight: Int = Int(round(image.size.height * image.scale))
+        
+        guard let context: CGContext = CGContext(
+            data: nil,
+            width: pixelWidth,
+            height: pixelHeight,
+            bitsPerComponent: 8,
+            bytesPerRow: pixelWidth * 4,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+        context.scaleBy(x: image.scale, y: -image.scale)
+        context.translateBy(x: 0, y: -image.size.height)
+        
+        UIGraphicsPushContext(context)
+        image.draw(at: .zero)
+        UIGraphicsPopContext()
+        
+        guard let cgImage: CGImage = context.makeImage(),
+              let dataProvider: CGDataProvider = cgImage.dataProvider,
+              let data: CFData = dataProvider.data,
+              let pixels: UnsafePointer<UInt8> = CFDataGetBytePtr(data) else {
+            assertionFailure("Unexpected error!")
+            return nil
+        }
+        
+        let width: Int = cgImage.width
+        let height: Int = cgImage.height
+        let bytesPerRow: Int = cgImage.bytesPerRow
+        
+        guard let inputImageBuffer = device.makeBuffer(
+            bytes: pixels,
+            length: height * bytesPerRow
+        ) else {
+            return fallbackEncode(image, numberOfComponents: components)
+        }
+
+        var factors = [SIMD4<Float>](repeating: .zero, count: components.0 * components.1)
+
+        // MARK: Component factors
+        for cy in 0..<components.1 {
+            for cx in 0..<components.0 {
+                var encodeParams = EncodeParams(
+                    width: UInt32(width),
+                    height: UInt32(height),
+                    bytesPerRow: UInt32(bytesPerRow),
+                    cx: UInt32(cx),
+                    cy: UInt32(cy)
+                )
+                
+                guard let paramsBuffer = device.makeBuffer(
+                          bytes: &encodeParams,
+                          length: MemoryLayout<EncodeParams>.stride
+                      ) else {
+                    continue
+                }
+
+                let w = width
+                let h = height
+                let threadsPerThreadgroup = MTLSize(width: 16, height: 16, depth: 1)
+                let threadgroups = MTLSize(
+                    width: (w + 15) / 16,
+                    height: (h + 15) / 16,
+                    depth: 1
+                )
+                let numThreadgroups = threadgroups.width * threadgroups.height
+
+                guard let resultBuffer = device.makeBuffer(
+                          length: MemoryLayout<SIMD4<Float>>.stride * numThreadgroups,
+                          options: []
+                      ),
+                      let commandBuffer = commandQueue.makeCommandBuffer(),
+                      let encoder = commandBuffer.makeComputeCommandEncoder()
+                else {
+                    continue
+                }
+                
+                encoder.setComputePipelineState(pipelineState)
+                encoder.setBuffer(inputImageBuffer, offset: 0, index: 0)
+                encoder.setBuffer(resultBuffer,     offset: 0, index: 1)
+                encoder.setBuffer(paramsBuffer,     offset: 0, index: 2)
+                encoder.dispatchThreadgroups(threadgroups, threadsPerThreadgroup: threadsPerThreadgroup)
+                encoder.endEncoding()
+                
+                commandBuffer.commit()
+                commandBuffer.waitUntilCompleted()
+
+                let partialSums = resultBuffer.contents().bindMemory(to: SIMD4<Float>.self, capacity: numThreadgroups)
+                var sum = SIMD4<Float>(0, 0, 0, 0)
+                for i in 0..<numThreadgroups {
+                    sum += partialSums[i]
+                }
+
+                sum *= (1.0 / Float(width * height))
+                
+                if cx != 0 || cy != 0 {
+                    sum *= 2.0
+                }
+                
+                factors[cy * components.0 + cx] = sum
+            }
+        }
+        
+        guard let dc: SIMD3<Float> = {
+            guard let first = factors.first else { return nil }
+            return SIMD3<Float>(x: first.x, y: first.y, z: first.z)
+        }() else { return nil }
+        let ac = factors.dropFirst()
+        
+        var hash = ""
+        
+        let sizeFlag = (components.0 - 1) + (components.1 - 1) * 9
+        hash += sizeFlag.encode83(length: 1)
+        
+        let maximumValue: Float
+        if ac.count > 0 {
+            let actualMaximumValue = ac.map({ max(abs($0.x), abs($0.y), abs($0.z)) }).max()!
+            let quantisedMaximumValue = Int(max(0, min(82, floor(actualMaximumValue * 166 - 0.5))))
+            maximumValue = Float(quantisedMaximumValue + 1) / 166
+            hash += quantisedMaximumValue.encode83(length: 1)
+        } else {
+            maximumValue = 1
+            hash += 0.encode83(length: 1)
+        }
+        hash += encodeDC(dc).encode83(length: 4)
+        
+        for factor in ac {
+            let simd3factor: SIMD3<Float> = SIMD3<Float>(x: factor.x, y: factor.y, z: factor.z)
+            hash += encodeAC(simd3factor, maximumValue: maximumValue).encode83(length: 2)
+        }
+        
+        return hash
+    }
+    
+    private static func fallbackEncode(_ image: UIImage, numberOfComponents components: (Int, Int)) -> String? {
+        print("Metal initialization failed")
+        return SIMDBlurHashCoder.encode(image, numberOfComponents: components)
+    }
+    
+    private struct DecodeParams {
+        let width: UInt32
+        let height: UInt32
+        let componentsY: UInt32
+        let componentsX: UInt32
+        let bytesPerRow: UInt32
+    }
+    
+    // MARK: - DECODE
+    
+    static func decode(blurHash: String, size: CGSize, punch: Float) -> CGImage? {
+        guard blurHash.count >= 6 else { return nil }
+        let sizeFlag = String(blurHash[0]).decode83()
+        let numY = (sizeFlag / 9) + 1
+        let numX = (sizeFlag % 9) + 1
+        
+        let quantisedMaximumValue = String(blurHash[1]).decode83()
+        let maximumValue = Float(quantisedMaximumValue + 1) / 166
+        
+        guard blurHash.count == 4 + 2 * numX * numY else { return nil }
+        
+        // MARK: Metal decode init
+        let device: MTLDevice? = MTLCreateSystemDefaultDevice()
+        let library: MTLLibrary? = try? device?.makeDefaultLibrary(bundle: Bundle.module)
+        let function: MTLFunction? = library?.makeFunction(name: "decodeBlurHash")
+        
+        guard let device, let function else {
+            return fallbackDecode(blurHash: blurHash, size: size, punch: punch)
+        }
+        
+        let pipelineState: MTLComputePipelineState? = try? device.makeComputePipelineState(function: function)
+        let commandQueue: MTLCommandQueue? = device.makeCommandQueue()
+        
+        guard let pipelineState, let commandQueue else {
+            return fallbackDecode(blurHash: blurHash, size: size, punch: punch)
+        }
+        
+        var colors: [SIMD3<Float>] = (0..<numX * numY).map { i in
+            if i == 0 {
+                let value = String(blurHash[2..<6]).decode83()
+                let (r, g, b) = decodeDC(value)
+                return SIMD3<Float>(r, g, b)
+            } else {
+                let start = 4 + i * 2
+                let value = String(blurHash[start..<start+2]).decode83()
+                let (r, g, b) = decodeAC(value, maximumValue: maximumValue * punch)
+                return SIMD3<Float>(r, g, b)
+            }
+        }
+        
+        let colorsBuffer: MTLBuffer? = device.makeBuffer(bytes: &colors, length: numX * numY * MemoryLayout<SIMD3<Float>>.stride)
+        
+        let width: Int = Int(size.width)
+        let height: Int = Int(size.height)
+        let pixelCount: Int = width * height
+        
+        var decodeParams: DecodeParams = DecodeParams(
+            width: UInt32(width),
+            height: UInt32(height),
+            componentsY: UInt32(numY),
+            componentsX: UInt32(numX),
+            bytesPerRow: UInt32(width * 4)
+        )
+        
+        let decodeParamsBuffer: MTLBuffer? = device.makeBuffer(bytes: &decodeParams, length: MemoryLayout<DecodeParams>.stride)
+        
+        
+        let pixelsBuffer: MTLBuffer? = device.makeBuffer(length: 4 * pixelCount)
+        
+        guard
+            let commandBuffer: MTLCommandBuffer = commandQueue.makeCommandBuffer(),
+            let commandEncoder: MTLComputeCommandEncoder = commandBuffer.makeComputeCommandEncoder()
+        else { return fallbackDecode(blurHash: blurHash, size: size, punch: punch) }
+        
+        commandEncoder.setComputePipelineState(pipelineState)
+        commandEncoder.setBuffer(colorsBuffer, offset: 0, index: 0)
+        commandEncoder.setBuffer(pixelsBuffer, offset: 0, index: 1)
+        commandEncoder.setBuffer(decodeParamsBuffer, offset: 0, index: 2)
+        
+        let threadsPerThreadgroup = MTLSize(width: 16, height: 16, depth: 1)
+        let threadgroups = MTLSize(
+            width: (width + 15) / 16,
+            height: (height + 15) / 16,
+            depth: 1
+        )
+        commandEncoder.dispatchThreadgroups(threadgroups, threadsPerThreadgroup: threadsPerThreadgroup)
+        commandEncoder.endEncoding()
+        
+        commandBuffer.commit()
+        commandBuffer.waitUntilCompleted()
+        
+        let bitmapInfo: CGBitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue)
+        
+        guard let provider: CGDataProvider = CGDataProvider(data: NSData(bytes: pixelsBuffer?.contents(), length: pixelCount * 4)) else { return nil }
+        guard let cgImage: CGImage = CGImage(
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bitsPerPixel: 32,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: bitmapInfo,
+            provider: provider,
+            decode: nil,
+            shouldInterpolate: true,
+            intent: .defaultIntent
+        ) else { return nil }
+        
+        return cgImage
+    }
+    
+    private static func fallbackDecode(blurHash: String, size: CGSize, punch: Float) -> CGImage? {
+        print("Metal initialization failed")
+        return SIMDBlurHashCoder.decode(blurHash: blurHash, size: size, punch: punch)
+    }
+}
+
+// MARK: - HELPERS
+
+// MARK: linear <-> sRGB
+
+private func linearTosRGB(_ value: Float) -> Int {
+    let v = max(0, min(1, value))
+    if v <= 0.0031308 { return Int(v * 12.92 * 255 + 0.5) }
+    else { return Int((1.055 * pow(v, 1 / 2.4) - 0.055) * 255 + 0.5) }
+}
+
+private func sRGBToLinear<Type: BinaryInteger>(_ value: Type) -> Float {
+    let v = Float(Int64(value)) / 255
+    if v <= 0.04045 { return v / 12.92 }
+    else { return pow((v + 0.055) / 1.055, 2.4) }
+}
+
+// MARK: DC & AC Component Encoding/Decoding
+
+private func decodeDC(_ value: Int) -> (Float, Float, Float) {
+    let intR = value >> 16
+    let intG = (value >> 8) & 255
+    let intB = value & 255
+    return (sRGBToLinear(intR), sRGBToLinear(intG), sRGBToLinear(intB))
+}
+
+private func decodeAC(_ value: Int, maximumValue: Float) -> (Float, Float, Float) {
+    let quantR = value / (19 * 19)
+    let quantG = (value / 19) % 19
+    let quantB = value % 19
+    
+    let rgb = (
+        signPow((Float(quantR) - 9) / 9, 2) * maximumValue,
+        signPow((Float(quantG) - 9) / 9, 2) * maximumValue,
+        signPow((Float(quantB) - 9) / 9, 2) * maximumValue
+    )
+    
+    return rgb
+}
+
+private func encodeDC(_ value: SIMD3<Float>) -> Int {
+    let roundedR = linearTosRGB(value.x)
+    let roundedG = linearTosRGB(value.y)
+    let roundedB = linearTosRGB(value.z)
+    return (roundedR << 16) + (roundedG << 8) + roundedB
+}
+
+private let eighteen: SIMD3<Float> = SIMD3<Float>(18, 18, 18)
+
+private func encodeAC(_ value: SIMD3<Float>, maximumValue: Float) -> Int {
+    let floored: SIMD3<Float> = floor(signPow(value / maximumValue, 0.5) * 9 + 9.5)
+    let quant: SIMD3<Float> = simd_clamp(floored, .zero, eighteen)
+    let quantInt: SIMD3<Int> = SIMD3<Int>(quant)
+
+    return quantInt.x * 19 * 19 + quantInt.y * 19 + quantInt.z
+}
+
+// MARK: Power functions
+
+private func signPow(_ value: Float, _ exp: Float) -> Float {
+    return copysign(pow(abs(value), exp), value)
+}
+
+private func signPow(_ value: SIMD3<Float>, _ exp: Float) -> SIMD3<Float> {
+    return SIMD3<Float>(
+        signPow(value.x, exp),
+        signPow(value.y, exp),
+        signPow(value.z, exp)
+    )
+}
