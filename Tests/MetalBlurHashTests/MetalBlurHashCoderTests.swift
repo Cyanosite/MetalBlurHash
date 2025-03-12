@@ -80,7 +80,7 @@ final class MetalBlurHashCoderTests: XCTestCase {
         var blurImage: UIImage!
         
         measure {
-            guard let decodedImage = UIImage(blurHash: blurHash, size: CGSize(width: 3840, height: 2160), method: .metal) else {
+            guard let decodedImage = UIImage(blurHash: blurHash, size: CGSize(width: 3840, height: 2560), method: .metal) else {
                 XCTFail("Failed to create image from blur hash")
                 return
             }
