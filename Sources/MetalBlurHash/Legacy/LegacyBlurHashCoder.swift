@@ -10,7 +10,6 @@ import UIKit
 final class LegacyBlurHashCoder: BlurHashCoder {
     
     // - MARK: - Encoder
-    
     static func encode(_ image: UIImage, numberOfComponents components: (Int, Int)) -> String? {
         guard components <= (9, 9) else { return nil }
         
@@ -84,6 +83,28 @@ final class LegacyBlurHashCoder: BlurHashCoder {
         return hash
     }
     
+    // MARK: Basis Function
+    private static func multiplyBasisFunction(pixels: UnsafePointer<UInt8>, width: Int, height: Int, bytesPerRow: Int, bytesPerPixel: Int, pixelOffset: Int, basisFunction: (Float, Float) -> Float) -> (Float, Float, Float) {
+        var r: Float = 0
+        var g: Float = 0
+        var b: Float = 0
+
+        let buffer: UnsafeBufferPointer = UnsafeBufferPointer(start: pixels, count: height * bytesPerRow)
+
+        for x in 0 ..< width {
+            for y in 0 ..< height {
+                let basis: Float = basisFunction(Float(x), Float(y))
+                r += basis * sRGBToLinear(buffer[bytesPerPixel * x + pixelOffset + 0 + y * bytesPerRow])
+                g += basis * sRGBToLinear(buffer[bytesPerPixel * x + pixelOffset + 1 + y * bytesPerRow])
+                b += basis * sRGBToLinear(buffer[bytesPerPixel * x + pixelOffset + 2 + y * bytesPerRow])
+            }
+        }
+
+        let scale: Float = 1.0 / Float(width * height)
+
+        return (r * scale, g * scale, b * scale)
+    }
+    
     // MARK: - Decoder
     
     static func decode(blurHash: String, size: CGSize, punch: Float) -> CGImage? {
@@ -149,91 +170,4 @@ final class LegacyBlurHashCoder: BlurHashCoder {
         
         return cgImage
     }
-}
-
-// MARK: - HELPERS
-
-// MARK: linear <-> sRGB
-
-private func linearTosRGB(_ value: Float) -> Int {
-    let v = max(0, min(1, value))
-    if v <= 0.0031308 { return Int(v * 12.92 * 255 + 0.5) }
-    else { return Int((1.055 * pow(v, 1 / 2.4) - 0.055) * 255 + 0.5) }
-}
-
-private func sRGBToLinear<Type: BinaryInteger>(_ value: Type) -> Float {
-    let v = Float(Int64(value)) / 255
-    if v <= 0.04045 { return v / 12.92 }
-    else { return pow((v + 0.055) / 1.055, 2.4) }
-}
-
-// MARK: DC & AC Component Encoding/Decoding
-
-private func decodeDC(_ value: Int) -> (Float, Float, Float) {
-    let intR = value >> 16
-    let intG = (value >> 8) & 255
-    let intB = value & 255
-    return (sRGBToLinear(intR), sRGBToLinear(intG), sRGBToLinear(intB))
-}
-
-private func decodeAC(_ value: Int, maximumValue: Float) -> (Float, Float, Float) {
-    let quantR = value / (19 * 19)
-    let quantG = (value / 19) % 19
-    let quantB = value % 19
-    
-    let rgb = (
-        signPow((Float(quantR) - 9) / 9, 2) * maximumValue,
-        signPow((Float(quantG) - 9) / 9, 2) * maximumValue,
-        signPow((Float(quantB) - 9) / 9, 2) * maximumValue
-    )
-    
-    return rgb
-}
-
-private func encodeDC(_ value: (Float, Float, Float)) -> Int {
-    let roundedR = linearTosRGB(value.0)
-    let roundedG = linearTosRGB(value.1)
-    let roundedB = linearTosRGB(value.2)
-    return (roundedR << 16) + (roundedG << 8) + roundedB
-}
-
-private func encodeAC(_ value: (Float, Float, Float), maximumValue: Float) -> Int {
-    let quantR = Int(max(0, min(18, floor(signPow(value.0 / maximumValue, 0.5) * 9 + 9.5))))
-    let quantG = Int(max(0, min(18, floor(signPow(value.1 / maximumValue, 0.5) * 9 + 9.5))))
-    let quantB = Int(max(0, min(18, floor(signPow(value.2 / maximumValue, 0.5) * 9 + 9.5))))
-
-    return quantR * 19 * 19 + quantG * 19 + quantB
-}
-
-// MARK: Power functions
-
-private func signPow(_ value: Float, _ exp: Float) -> Float {
-    return copysign(pow(abs(value), exp), value)
-}
-
-private func pow(_ base: Int, _ exponent: Int) -> Int {
-    return (0 ..< exponent).reduce(1) { value, _ in value * base }
-}
-
-// MARK: Basis Function
-
-private func multiplyBasisFunction(pixels: UnsafePointer<UInt8>, width: Int, height: Int, bytesPerRow: Int, bytesPerPixel: Int, pixelOffset: Int, basisFunction: (Float, Float) -> Float) -> (Float, Float, Float) {
-    var r: Float = 0
-    var g: Float = 0
-    var b: Float = 0
-
-    let buffer: UnsafeBufferPointer = UnsafeBufferPointer(start: pixels, count: height * bytesPerRow)
-
-    for x in 0 ..< width {
-        for y in 0 ..< height {
-            let basis: Float = basisFunction(Float(x), Float(y))
-            r += basis * sRGBToLinear(buffer[bytesPerPixel * x + pixelOffset + 0 + y * bytesPerRow])
-            g += basis * sRGBToLinear(buffer[bytesPerPixel * x + pixelOffset + 1 + y * bytesPerRow])
-            b += basis * sRGBToLinear(buffer[bytesPerPixel * x + pixelOffset + 2 + y * bytesPerRow])
-        }
-    }
-
-    let scale: Float = 1.0 / Float(width * height)
-
-    return (r * scale, g * scale, b * scale)
 }

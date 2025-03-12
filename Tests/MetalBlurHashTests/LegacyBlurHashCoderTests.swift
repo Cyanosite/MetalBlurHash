@@ -36,7 +36,7 @@ final class LegacyBlurHashCoderTests: XCTestCase {
             blurImage = decodedImage
         }
         
-        let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent("decodedImage.jpg")
+        let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent("legacyDecodedImage.jpg")
         
         guard let imageData = blurImage.jpegData(compressionQuality: 1.0) else {
             XCTFail("Failed to generate JPEG data from the image")

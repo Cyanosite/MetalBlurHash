@@ -9,7 +9,6 @@ import UIKit
 
 public enum BlurHashCodingMethod {
     case legacy
-    case simd
     case metal
 }
 

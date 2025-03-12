@@ -32,8 +32,6 @@ extension UIImage {
         return switch method {
             case .legacy:
                 LegacyBlurHashCoder.encode(self, numberOfComponents: components)
-            case .simd:
-                SIMDBlurHashCoder.encode(self, numberOfComponents: components)
             case .metal:
                 MetalBlurHashCoder.encode(self, numberOfComponents: components)
         }
@@ -67,8 +65,6 @@ extension UIImage {
         guard let cgImage: CGImage = switch method {
         case .legacy:
             LegacyBlurHashCoder.decode(blurHash: blurHash, size: size, punch: punch)
-        case .simd:
-            SIMDBlurHashCoder.decode(blurHash: blurHash, size: size, punch: punch)
         case .metal:
             MetalBlurHashCoder.decode(blurHash: blurHash, size: size, punch: punch)
         } else {

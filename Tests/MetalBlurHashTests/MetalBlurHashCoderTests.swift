@@ -28,16 +28,16 @@ final class MetalBlurHashCoderTests: XCTestCase {
             return
         }
         
-        guard let simdImage: UIImage = UIImage(blurHash: metalBlurHash, size: CGSize(width: 500, height: 500), method: .simd),
-              let legacyImage: UIImage = UIImage(blurHash: legacyBlurHash, size: CGSize(width: 500, height: 500), method: .simd)
+        guard let metalImage: UIImage = UIImage(blurHash: metalBlurHash, size: CGSize(width: 100, height: 100), method: .legacy),
+              let legacyImage: UIImage = UIImage(blurHash: legacyBlurHash, size: CGSize(width: 100, height: 100), method: .legacy)
         else {
             XCTFail("Decode failed")
             return
         }
         
-        let (success, rate): (Bool, Double) = ImageComparatorFactory.createComparator(for: .perPixel(perPixelTolerance: 0.05, overallTolerance: 0.02)).compareImages(simdImage, legacyImage)
+        let (success, rate): (Bool, Double) = ImageComparatorFactory.createComparator(for: .perPixel(perPixelTolerance: 0.05, overallTolerance: 0.02)).compareImages(metalImage, legacyImage)
         
-        print("bad pixel rate: \(rate)")
+        print("Metal Encode test bad pixel rate: \(rate)")
         if !success {
             XCTFail("Image comparison failed")
         }
@@ -60,7 +60,7 @@ final class MetalBlurHashCoderTests: XCTestCase {
     func test_decode() {
         let blurHash = "|lM~Oi00%#Mwo}wbtRjFoeS|WDWEIoa$s.WBa#niR*X8R*bHbIawt7aeWVRjofs.R*R+axR+WBofs:ofjsofbFWBflfjogs:jsWCfQjZWCbHkCWVWVjbjtjsjsa|ayj@j[oLj[a|j?j[jZoLayWVWBayj[jtf6azWCafoL"
         
-        guard let simdBlurImage = UIImage(blurHash: blurHash, size: CGSize(width: 75, height: 50), method: .metal) else {
+        guard let metalBlurImage = UIImage(blurHash: blurHash, size: CGSize(width: 75, height: 50), method: .metal) else {
             XCTFail("Failed to create image from blur hash (method: simd)")
             return
         }
@@ -70,7 +70,8 @@ final class MetalBlurHashCoderTests: XCTestCase {
             return
         }
         
-        XCTAssertEqual(simdBlurImage.pngData(), legacyBlurImage.pngData())
+        let (success, _) = ImageComparatorFactory.createComparator(for: .strict).compareImages(metalBlurImage, legacyBlurImage)
+        XCTAssertTrue(success)
     }
     
     func test_decode_performance() {
@@ -86,7 +87,7 @@ final class MetalBlurHashCoderTests: XCTestCase {
             blurImage = decodedImage
         }
         
-        let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent("decodedImage.jpg")
+        let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent("metalDecodedImage.jpg")
         
         guard let imageData = blurImage.jpegData(compressionQuality: 1.0) else {
             XCTFail("Failed to generate JPEG data from the image")
