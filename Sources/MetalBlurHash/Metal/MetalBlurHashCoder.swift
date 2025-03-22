@@ -5,7 +5,7 @@
 //  Created by Zsombor Szenyán on 2025. 03. 08..
 //
 
-import UIKit
+@preconcurrency import UIKit
 import simd
 
 final class MetalBlurHashCoder: BlurHashCoder {
@@ -17,23 +17,29 @@ final class MetalBlurHashCoder: BlurHashCoder {
         let cy: UInt32
     }
     
+    static let device: MTLDevice? = MTLCreateSystemDefaultDevice()
+    static let library: MTLLibrary? = try? device?.makeDefaultLibrary(bundle: Bundle.module)
+    static let commandQueue: MTLCommandQueue? = device?.makeCommandQueue()
+    static let encodePipelineState: MTLComputePipelineState? = {
+        if let function = library?.makeFunction(name: "encodeBlurHash") {
+            return try? device?.makeComputePipelineState(function: function)
+        } else {
+            return nil
+        }
+    }()
+    static let decodePipelineState: MTLComputePipelineState? = {
+        if let function = library?.makeFunction(name: "decodeBlurHash") {
+            return try? device?.makeComputePipelineState(function: function)
+        } else {
+            return nil
+        }
+    }()
+    
     // MARK: - Metal encode
     static func encode(_ image: UIImage, numberOfComponents components: (Int, Int)) -> String? {
         guard components <= (9, 9) else { return nil }
         
-        // MARK: Metal encode init
-        let device: MTLDevice? = MTLCreateSystemDefaultDevice()
-        let library: MTLLibrary? = try? device?.makeDefaultLibrary(bundle: Bundle.module)
-        let function: MTLFunction? = library?.makeFunction(name: "encodeBlurHash")
-        
-        guard let device, let function else {
-            return fallbackEncode(image, numberOfComponents: components)
-        }
-        
-        let pipelineState: MTLComputePipelineState? = try? device.makeComputePipelineState(function: function)
-        let commandQueue: MTLCommandQueue? = device.makeCommandQueue()
-        
-        guard let pipelineState, let commandQueue else {
+        guard let device, let pipelineState = self.encodePipelineState, let commandQueue else {
             return fallbackEncode(image, numberOfComponents: components)
         }
         
@@ -198,19 +204,7 @@ final class MetalBlurHashCoder: BlurHashCoder {
         
         guard blurHash.count == 4 + 2 * numX * numY else { return nil }
         
-        // MARK: Metal decode init
-        let device: MTLDevice? = MTLCreateSystemDefaultDevice()
-        let library: MTLLibrary? = try? device?.makeDefaultLibrary(bundle: Bundle.module)
-        let function: MTLFunction? = library?.makeFunction(name: "decodeBlurHash")
-        
-        guard let device, let function else {
-            return fallbackDecode(blurHash: blurHash, size: size, punch: punch)
-        }
-        
-        let pipelineState: MTLComputePipelineState? = try? device.makeComputePipelineState(function: function)
-        let commandQueue: MTLCommandQueue? = device.makeCommandQueue()
-        
-        guard let pipelineState, let commandQueue else {
+        guard let device, let pipelineState = self.decodePipelineState, let commandQueue else {
             return fallbackDecode(blurHash: blurHash, size: size, punch: punch)
         }
         
