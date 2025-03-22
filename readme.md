@@ -9,6 +9,7 @@ By rewriting key parts of the encoding and decoding routines in Metal, encoding 
 - Metal-accelerated: utilizing your device’s GPU to achieve significant performance gains
 - Runs on iOS, MacCatalyst, and VisionOS
 - Enables preview generation for each and every image in your app
+- Fallback to Legacy version when Metal initialization fails
 
 ## Minimum Requirements
 

@@ -241,6 +241,9 @@ final class MetalBlurHashCoder: BlurHashCoder {
         let pixelsBuffer: MTLBuffer? = device.makeBuffer(length: 4 * pixelCount)
         
         guard
+            let colorsBuffer,
+            let decodeParamsBuffer,
+            let pixelsBuffer,
             let commandBuffer: MTLCommandBuffer = commandQueue.makeCommandBuffer(),
             let commandEncoder: MTLComputeCommandEncoder = commandBuffer.makeComputeCommandEncoder()
         else { return fallbackDecode(blurHash: blurHash, size: size, punch: punch) }
@@ -264,7 +267,7 @@ final class MetalBlurHashCoder: BlurHashCoder {
         
         let bitmapInfo: CGBitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue)
         
-        guard let provider: CGDataProvider = CGDataProvider(data: NSData(bytes: pixelsBuffer?.contents(), length: pixelCount * 4)) else { return nil }
+        guard let provider: CGDataProvider = CGDataProvider(data: NSData(bytes: pixelsBuffer.contents(), length: pixelCount * 4)) else { return nil }
         guard let cgImage: CGImage = CGImage(
             width: width,
             height: height,
