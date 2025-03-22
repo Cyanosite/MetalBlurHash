@@ -1,14 +1,23 @@
 # MetalBlurHash
 
-A blazing-fast Metal implementation of the popular [BlurHash](http://blurha.sh) algorithm originally by [Wolt](https://github.com/woltapp/blurhash). This library aims to be a drop-in replacement for Wolt’s BlurHash for Apple platforms, leveraging Metal to provide significant performance boosts while preserving the same results and API usage.
+MetalBlurHash is a blazing-fast Metal implementation of the popular [BlurHash](http://blurha.sh) algorithm originally developed by [Wolt](https://github.com/woltapp/blurhash). This library aims to be a drop-in replacement for Wolt’s BlurHash for Apple platforms, leveraging Metal to provide significant performance boosts while preserving the same results and API usage.
 
-By rewriting key parts of the encoding and decoding routines in Metal, encoding is up to 200× faster, and decoding is up to 125× faster compared to the CPU-based reference implementation.
+By rewriting key parts of the encoding and decoding routines in Metal, encoding is up to 210× faster, and decoding is up to 250× faster compared to the CPU-based reference implementation.
 
 ## Features
 - Drop-in replacement
 - Metal-accelerated: utilizing your device’s GPU to achieve significant performance gains
 - Runs on iOS, MacCatalyst, and VisionOS
 - Enables preview generation for each and every image in your app
+
+## Minimum Requirements
+
+- **iOS:** 15.0
+- **MacCatalyst:** 15.0
+- **VisionOS:** 1.0
+
+> [!IMPORTANT]
+> MetalBlurHash is designed to take advantage of Apple Silicon and does not work on Intel chips.
 
 ## Installation
 
@@ -47,7 +56,7 @@ let decodedImage: UIImage = UIImage(blurHash: blurHash, size: CGSize(width: 3840
 
 ## Performance Benchmarks
 
-Below are indicative benchmarks measured on an M1 Max. Results will vary based on device, image sizes, and the number of components used. Nonetheless, you should expect a ~200× speedup for encoding and a ~15× speedup for decoding in typical usage scenarios.
+Below are indicative benchmarks measured on an M1 Max. Results will vary based on device, image sizes, and the number of components used. However, you can generally expect the Metal-based solution to be faster by one to two orders of magnitude.
 
 #### Test parameters
 |  Task  |  Resolution | Components |
@@ -58,8 +67,8 @@ Below are indicative benchmarks measured on an M1 Max. Results will vary based o
 #### Test result
 |  Task  | Original | MetalBlurHash | Speedup |
 | :----- | :------: | :-----------: | :-----: |
-| Encode |  32.380s |     0.172s    |  200×   |
-| Decode |  3.372s  |     0.027s    |  125×   |
+| Encode |  32.212s |     0.154s    |  210×   |
+| Decode |  3.267s  |     0.013s    |  250×   |
 
 (Times and multipliers are illustrative. Actual performance will depend on your hardware and usage patterns.)
 
