@@ -13,7 +13,7 @@ final class LegacyBlurHashCoderTests: XCTestCase {
         
         var blurHash: String?
         measure {
-            guard let encodedBlurHash: String = image.blurHash(numberOfComponents: (9, 9), method: .legacy) else {
+            guard let encodedBlurHash: String = LegacyBlurHashCoder.encode(image, numberOfComponents: (9, 9)) else {
                 XCTFail("Failed to encode blur hash")
                 return
             }
@@ -29,11 +29,11 @@ final class LegacyBlurHashCoderTests: XCTestCase {
         var blurImage: UIImage!
         
         measure {
-            guard let decodedImage = UIImage(blurHash: blurHash, size: CGSize(width: 3840, height: 2560), method: .legacy) else {
+            guard let decodedImage = LegacyBlurHashCoder.decode(blurHash: blurHash, size: CGSize(width: 3840, height: 2560), punch: 1) else {
                 XCTFail("Failed to create image from blur hash")
                 return
             }
-            blurImage = decodedImage
+            blurImage = UIImage(cgImage: decodedImage)
         }
         
         let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent("legacyDecodedImage.jpg")

@@ -8,7 +8,7 @@
 @preconcurrency import UIKit
 import simd
 
-final class MetalBlurHashCoder: BlurHashCoder {
+final class MetalBlurHashCoder {
     private struct EncodeParams {
         let width: UInt32
         let height: UInt32
@@ -40,7 +40,7 @@ final class MetalBlurHashCoder: BlurHashCoder {
         guard components <= (9, 9) else { return nil }
         
         guard let device, let pipelineState = self.encodePipelineState, let commandQueue else {
-            return fallbackEncode(image, numberOfComponents: components)
+            return nil
         }
         
         let pixelWidth: Int = Int(round(image.size.width * image.scale))
@@ -78,7 +78,7 @@ final class MetalBlurHashCoder: BlurHashCoder {
             bytes: pixels,
             length: height * bytesPerRow
         ) else {
-            return fallbackEncode(image, numberOfComponents: components)
+            return nil
         }
 
         var factors = [SIMD4<Float>](repeating: .zero, count: components.0 * components.1)
@@ -178,11 +178,6 @@ final class MetalBlurHashCoder: BlurHashCoder {
         return hash
     }
     
-    private static func fallbackEncode(_ image: UIImage, numberOfComponents components: (Int, Int)) -> String? {
-        print("Metal initialization failed")
-        return LegacyBlurHashCoder.encode(image, numberOfComponents: components)
-    }
-    
     // MARK: - DECODE
     
     private struct DecodeParams {
@@ -205,7 +200,7 @@ final class MetalBlurHashCoder: BlurHashCoder {
         guard blurHash.count == 4 + 2 * numX * numY else { return nil }
         
         guard let device, let pipelineState = self.decodePipelineState, let commandQueue else {
-            return fallbackDecode(blurHash: blurHash, size: size, punch: punch)
+            return nil
         }
         
         var colors: [SIMD3<Float>] = (0..<numX * numY).map { i in
@@ -246,7 +241,7 @@ final class MetalBlurHashCoder: BlurHashCoder {
             let pixelsBuffer,
             let commandBuffer: MTLCommandBuffer = commandQueue.makeCommandBuffer(),
             let commandEncoder: MTLComputeCommandEncoder = commandBuffer.makeComputeCommandEncoder()
-        else { return fallbackDecode(blurHash: blurHash, size: size, punch: punch) }
+        else { return nil }
         
         commandEncoder.setComputePipelineState(pipelineState)
         commandEncoder.setBuffer(colorsBuffer, offset: 0, index: 0)
@@ -283,10 +278,5 @@ final class MetalBlurHashCoder: BlurHashCoder {
         ) else { return nil }
         
         return cgImage
-    }
-    
-    private static func fallbackDecode(blurHash: String, size: CGSize, punch: Float) -> CGImage? {
-        print("Metal initialization failed")
-        return LegacyBlurHashCoder.decode(blurHash: blurHash, size: size, punch: punch)
     }
 }

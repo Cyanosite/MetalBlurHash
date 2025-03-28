@@ -18,7 +18,6 @@ extension UIImage {
      - Parameters:
         - components: A tuple specifying the number of horizontal and vertical components in the blur hash. For example, (4, 3) means the algorithm samples the image using 4 horizontal and 3 vertical components. A higher number of components typically increases the accuracy but also increases the size of the resulting hash. The **maximum** allowed _value_ of components is **(9, 9)**.
      
-        - method: Method of execution. Choose between .legacy (unmodified), .simd (SIMD CPU), .metal (Metal Shader).
      - Returns: A String containing the BlurHash representation of the image, or nil if the operation fails.
      
      ```swift
@@ -28,13 +27,8 @@ extension UIImage {
      }
      ```
      */
-    public func blurHash(numberOfComponents components: (Int, Int), method: BlurHashCodingMethod = .metal) -> String? {
-        return switch method {
-            case .legacy:
-                LegacyBlurHashCoder.encode(self, numberOfComponents: components)
-            case .metal:
-                MetalBlurHashCoder.encode(self, numberOfComponents: components)
-        }
+    public func blurHash(numberOfComponents components: (Int, Int)) -> String? {
+        MetalBlurHashCoder.encode(self, numberOfComponents: components)
     }
     
     /**
@@ -49,7 +43,6 @@ extension UIImage {
         - size: The desired resolution of the resulting image.
         - punch: A contrast factor applied to the decoded image. Values above `1` increase contrast,
         while values below `1` reduce it. Default is `1`.
-        - method: Method of execution. Choose between .legacy (unmodified), .simd (SIMD CPU), .metal (Metal Shader).
      
      - Returns: A `UIImage` if successful, or `nil` if decoding fails (for example, if the BlurHash
      string is malformed or the resulting image data cannot be constructed).
@@ -61,13 +54,10 @@ extension UIImage {
      }
      ```
      */
-    public convenience init?(blurHash: String, size: CGSize, punch: Float = 1, method: BlurHashCodingMethod = .metal) {
-        guard let cgImage: CGImage = switch method {
-        case .legacy:
-            LegacyBlurHashCoder.decode(blurHash: blurHash, size: size, punch: punch)
-        case .metal:
-            MetalBlurHashCoder.decode(blurHash: blurHash, size: size, punch: punch)
-        } else {
+    public convenience init?(blurHash: String, size: CGSize, punch: Float = 1) {
+        guard
+            let cgImage: CGImage = MetalBlurHashCoder.decode(blurHash: blurHash, size: size, punch: punch)
+        else {
             return nil
         }
         self.init(cgImage: cgImage)

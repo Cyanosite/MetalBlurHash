@@ -18,22 +18,25 @@ final class MetalBlurHashCoderTests: XCTestCase {
             return
         }
         
-        guard let metalBlurHash: String = image.blurHash(numberOfComponents: (9, 9), method: .metal) else {
+        guard let metalBlurHash: String = image.blurHash(numberOfComponents: (9, 9)) else {
             XCTFail("Failed to encode blur hash (method: simd)")
             return
         }
         
-        guard let legacyBlurHash: String = image.blurHash(numberOfComponents: (9, 9), method: .legacy) else {
+        guard let legacyBlurHash: String = LegacyBlurHashCoder.encode(image, numberOfComponents: (9, 9)) else {
             XCTFail("Failed to encode legacy blur hash (method: legacy)")
             return
         }
         
-        guard let metalImage: UIImage = UIImage(blurHash: metalBlurHash, size: CGSize(width: 100, height: 100), method: .legacy),
-              let legacyImage: UIImage = UIImage(blurHash: legacyBlurHash, size: CGSize(width: 100, height: 100), method: .legacy)
+        guard
+            let metalCGImage: CGImage = LegacyBlurHashCoder.decode(blurHash: metalBlurHash, size: CGSize(width: 100, height: 100), punch: 1),
+            let legacyCGImage: CGImage = LegacyBlurHashCoder.decode(blurHash: legacyBlurHash, size: CGSize(width: 100, height: 100), punch: 1)
         else {
             XCTFail("Decode failed")
             return
         }
+        let metalImage: UIImage = UIImage(cgImage: metalCGImage)
+        let legacyImage: UIImage = UIImage(cgImage: legacyCGImage)
         
         let (success, rate): (Bool, Double) = ImageComparatorFactory.createComparator(for: .perPixel(perPixelTolerance: 0.05, overallTolerance: 0.02)).compareImages(metalImage, legacyImage)
         
@@ -50,7 +53,7 @@ final class MetalBlurHashCoderTests: XCTestCase {
         }
         
         measure {
-            guard let _: String = image.blurHash(numberOfComponents: (9, 9), method: .metal) else {
+            guard let _: String = image.blurHash(numberOfComponents: (9, 9)) else {
                 XCTFail("Failed to encode blur hash")
                 return
             }
@@ -60,17 +63,17 @@ final class MetalBlurHashCoderTests: XCTestCase {
     func test_decode() {
         let blurHash = "|lM~Oi00%#Mwo}wbtRjFoeS|WDWEIoa$s.WBa#niR*X8R*bHbIawt7aeWVRjofs.R*R+axR+WBofs:ofjsofbFWBflfjogs:jsWCfQjZWCbHkCWVWVjbjtjsjsa|ayj@j[oLj[a|j?j[jZoLayWVWBayj[jtf6azWCafoL"
         
-        guard let metalBlurImage = UIImage(blurHash: blurHash, size: CGSize(width: 75, height: 50), method: .metal) else {
+        guard let metalBlurImage = UIImage(blurHash: blurHash, size: CGSize(width: 75, height: 50)) else {
             XCTFail("Failed to create image from blur hash (method: simd)")
             return
         }
         
-        guard let legacyBlurImage = UIImage(blurHash: blurHash, size: CGSize(width: 75, height: 50), method: .legacy) else {
+        guard let legacyBlurCGImage: CGImage = LegacyBlurHashCoder.decode(blurHash: blurHash, size: CGSize(width: 75, height: 50), punch: 1) else {
             XCTFail("Failed to create image from blur hash (method: legacy)")
             return
         }
         
-        let (success, _) = ImageComparatorFactory.createComparator(for: .strict).compareImages(metalBlurImage, legacyBlurImage)
+        let (success, _) = ImageComparatorFactory.createComparator(for: .strict).compareImages(metalBlurImage, UIImage(cgImage: legacyBlurCGImage))
         XCTAssertTrue(success)
     }
     
@@ -80,7 +83,7 @@ final class MetalBlurHashCoderTests: XCTestCase {
         var blurImage: UIImage!
         
         measure {
-            guard let decodedImage = UIImage(blurHash: blurHash, size: CGSize(width: 3840, height: 2560), method: .metal) else {
+            guard let decodedImage = UIImage(blurHash: blurHash, size: CGSize(width: 3840, height: 2560)) else {
                 XCTFail("Failed to create image from blur hash")
                 return
             }

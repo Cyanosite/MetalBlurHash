@@ -5,9 +5,10 @@
 //  Created by Zsombor Szenyán on 2025. 02. 22..
 //
 
+import Foundation
 import UIKit
 
-final class LegacyBlurHashCoder: BlurHashCoder {
+final class LegacyBlurHashCoder {
     
     // - MARK: - Encoder
     static func encode(_ image: UIImage, numberOfComponents components: (Int, Int)) -> String? {
@@ -169,5 +170,126 @@ final class LegacyBlurHashCoder: BlurHashCoder {
                                     space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: bitmapInfo, provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent) else { return nil }
         
         return cgImage
+    }
+}
+
+// MARK: - Base83
+
+private let encodeCharacters: [String] = {
+    return "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#$%*+,-.:;=?@[]^_{|}~".map { String($0) }
+}()
+
+private let decodeCharacters: [String: Int] = {
+    var dict: [String: Int] = [:]
+    for (index, character) in encodeCharacters.enumerated() {
+        dict[character] = index
+    }
+    return dict
+}()
+
+extension BinaryInteger {
+    func encode83(length: Int) -> String {
+        var result: String = ""
+        for i: Int in 1 ... length {
+            let digit = (Int(self) / pow(83, length - i)) % 83
+            result += encodeCharacters[Int(digit)]
+        }
+        return result
+    }
+}
+
+extension String {
+    func decode83() -> Int {
+        var value: Int = 0
+        for character in self {
+            if let digit = decodeCharacters[String(character)] {
+                value = value * 83 + digit
+            }
+        }
+        return value
+    }
+}
+
+// MARK: - HELPERS
+
+// MARK: linear <-> sRGB
+
+func linearTosRGB(_ value: Float) -> Int {
+    let v = max(0, min(1, value))
+    if v <= 0.0031308 { return Int(v * 12.92 * 255 + 0.5) }
+    else { return Int((1.055 * pow(v, 1 / 2.4) - 0.055) * 255 + 0.5) }
+}
+
+func sRGBToLinear<Type: BinaryInteger>(_ value: Type) -> Float {
+    let v = Float(Int64(value)) / 255
+    if v <= 0.04045 { return v / 12.92 }
+    else { return pow((v + 0.055) / 1.055, 2.4) }
+}
+
+// MARK: DC & AC Component Encoding/Decoding
+
+func decodeDC(_ value: Int) -> (Float, Float, Float) {
+    let intR = value >> 16
+    let intG = (value >> 8) & 255
+    let intB = value & 255
+    return (sRGBToLinear(intR), sRGBToLinear(intG), sRGBToLinear(intB))
+}
+
+func decodeAC(_ value: Int, maximumValue: Float) -> (Float, Float, Float) {
+    let quantR = value / (19 * 19)
+    let quantG = (value / 19) % 19
+    let quantB = value % 19
+    
+    let rgb = (
+        signPow((Float(quantR) - 9) / 9, 2) * maximumValue,
+        signPow((Float(quantG) - 9) / 9, 2) * maximumValue,
+        signPow((Float(quantB) - 9) / 9, 2) * maximumValue
+    )
+    
+    return rgb
+}
+
+func encodeDC(_ value: (Float, Float, Float)) -> Int {
+    let roundedR = linearTosRGB(value.0)
+    let roundedG = linearTosRGB(value.1)
+    let roundedB = linearTosRGB(value.2)
+    return (roundedR << 16) + (roundedG << 8) + roundedB
+}
+
+func encodeAC(_ value: (Float, Float, Float), maximumValue: Float) -> Int {
+    let quantR = Int(max(0, min(18, floor(signPow(value.0 / maximumValue, 0.5) * 9 + 9.5))))
+    let quantG = Int(max(0, min(18, floor(signPow(value.1 / maximumValue, 0.5) * 9 + 9.5))))
+    let quantB = Int(max(0, min(18, floor(signPow(value.2 / maximumValue, 0.5) * 9 + 9.5))))
+
+    return quantR * 19 * 19 + quantG * 19 + quantB
+}
+
+// MARK: Power functions
+
+func signPow(_ value: Float, _ exp: Float) -> Float {
+    return copysign(pow(abs(value), exp), value)
+}
+
+func pow(_ base: Int, _ exponent: Int) -> Int {
+    return (0 ..< exponent).reduce(1) { value, _ in value * base }
+}
+
+// MARK: - String extension
+
+extension String {
+    subscript (offset: Int) -> Character {
+        return self[index(startIndex, offsetBy: offset)]
+    }
+
+    subscript (bounds: CountableClosedRange<Int>) -> Substring {
+        let start = index(startIndex, offsetBy: bounds.lowerBound)
+        let end = index(startIndex, offsetBy: bounds.upperBound)
+        return self[start...end]
+    }
+
+    subscript (bounds: CountableRange<Int>) -> Substring {
+        let start = index(startIndex, offsetBy: bounds.lowerBound)
+        let end = index(startIndex, offsetBy: bounds.upperBound)
+        return self[start..<end]
     }
 }
