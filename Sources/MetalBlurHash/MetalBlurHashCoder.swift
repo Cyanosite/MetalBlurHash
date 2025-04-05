@@ -39,7 +39,12 @@ final class MetalBlurHashCoder {
     static func encode(_ image: UIImage, numberOfComponents components: (Int, Int)) -> String? {
         guard components <= (9, 9) else { return nil }
         
-        guard let device, let pipelineState = self.encodePipelineState, let commandQueue else {
+        guard
+            let device,
+            let pipelineState = self.encodePipelineState,
+            let commandQueue,
+            let sRGBColorSpace = CGColorSpace(name: CGColorSpace.sRGB)
+        else {
             return nil
         }
         
@@ -52,7 +57,7 @@ final class MetalBlurHashCoder {
             height: pixelHeight,
             bitsPerComponent: 8,
             bytesPerRow: pixelWidth * 4,
-            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            space: sRGBColorSpace,
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ) else { return nil }
         context.scaleBy(x: image.scale, y: -image.scale)
@@ -81,12 +86,12 @@ final class MetalBlurHashCoder {
             return nil
         }
 
-        var factors = [SIMD4<Float>](repeating: .zero, count: components.0 * components.1)
+        var factors: [SIMD4<Float>] = [SIMD4<Float>](repeating: .zero, count: components.0 * components.1)
 
         // MARK: Component factors
         for cy in 0..<components.1 {
             for cx in 0..<components.0 {
-                var encodeParams = EncodeParams(
+                var encodeParams: EncodeParams = EncodeParams(
                     width: UInt32(width),
                     height: UInt32(height),
                     bytesPerRow: UInt32(bytesPerRow),
@@ -100,16 +105,14 @@ final class MetalBlurHashCoder {
                       ) else {
                     continue
                 }
-
-                let w = width
-                let h = height
-                let threadsPerThreadgroup = MTLSize(width: 16, height: 16, depth: 1)
-                let threadgroups = MTLSize(
-                    width: (w + 15) / 16,
-                    height: (h + 15) / 16,
+                
+                let threadsPerThreadgroup: MTLSize = MTLSize(width: 16, height: 16, depth: 1)
+                let threadgroups: MTLSize = MTLSize(
+                    width: (width + 15) / 16,
+                    height: (height + 15) / 16,
                     depth: 1
                 )
-                let numThreadgroups = threadgroups.width * threadgroups.height
+                let numThreadgroups: Int = threadgroups.width * threadgroups.height
 
                 guard let resultBuffer = device.makeBuffer(
                           length: MemoryLayout<SIMD4<Float>>.stride * numThreadgroups,
@@ -131,8 +134,8 @@ final class MetalBlurHashCoder {
                 commandBuffer.commit()
                 commandBuffer.waitUntilCompleted()
 
-                let partialSums = resultBuffer.contents().bindMemory(to: SIMD4<Float>.self, capacity: numThreadgroups)
-                var sum = SIMD4<Float>(0, 0, 0, 0)
+                let partialSums: UnsafeMutablePointer<SIMD4<Float>> = resultBuffer.contents().bindMemory(to: SIMD4<Float>.self, capacity: numThreadgroups)
+                var sum: SIMD4<Float> = SIMD4<Float>(0, 0, 0, 0)
                 for i in 0..<numThreadgroups {
                     sum += partialSums[i]
                 }
@@ -151,17 +154,16 @@ final class MetalBlurHashCoder {
             guard let first = factors.first else { return nil }
             return SIMD3<Float>(x: first.x, y: first.y, z: first.z)
         }() else { return nil }
-        let ac = factors.dropFirst()
+        let ac: Array<SIMD4<Float>>.SubSequence = factors.dropFirst()
         
-        var hash = ""
+        var hash: String = ""
         
-        let sizeFlag = (components.0 - 1) + (components.1 - 1) * 9
+        let sizeFlag: Int = (components.0 - 1) + (components.1 - 1) * 9
         hash += sizeFlag.encode83(length: 1)
         
         let maximumValue: Float
-        if ac.count > 0 {
-            let actualMaximumValue = ac.map({ max(abs($0.x), abs($0.y), abs($0.z)) }).max()!
-            let quantisedMaximumValue = Int(max(0, min(82, floor(actualMaximumValue * 166 - 0.5))))
+        if !ac.isEmpty, let actualMaximumValue = ac.map({ max(abs($0.x), abs($0.y), abs($0.z)) }).max() {
+            let quantisedMaximumValue: Int = Int(max(0, min(82, floor(actualMaximumValue * 166 - 0.5))))
             maximumValue = Float(quantisedMaximumValue + 1) / 166
             hash += quantisedMaximumValue.encode83(length: 1)
         } else {
@@ -190,12 +192,12 @@ final class MetalBlurHashCoder {
     
     static func decode(blurHash: String, size: CGSize, punch: Float) -> CGImage? {
         guard blurHash.count >= 6 else { return nil }
-        let sizeFlag = String(blurHash[0]).decode83()
-        let numY = (sizeFlag / 9) + 1
-        let numX = (sizeFlag % 9) + 1
+        let sizeFlag: Int = String(blurHash[0]).decode83()
+        let numY: Int = (sizeFlag / 9) + 1
+        let numX: Int = (sizeFlag % 9) + 1
         
-        let quantisedMaximumValue = String(blurHash[1]).decode83()
-        let maximumValue = Float(quantisedMaximumValue + 1) / 166
+        let quantisedMaximumValue: Int = String(blurHash[1]).decode83()
+        let maximumValue: Float = Float(quantisedMaximumValue + 1) / 166.0
         
         guard blurHash.count == 4 + 2 * numX * numY else { return nil }
         
@@ -205,13 +207,13 @@ final class MetalBlurHashCoder {
         
         var colors: [SIMD3<Float>] = (0..<numX * numY).map { i in
             if i == 0 {
-                let value = String(blurHash[2..<6]).decode83()
-                let (r, g, b) = decodeDC(value)
+                let value: Int = String(blurHash[2..<6]).decode83()
+                let (r, g, b): (Float, Float, Float) = decodeDC(value)
                 return SIMD3<Float>(r, g, b)
             } else {
-                let start = 4 + i * 2
-                let value = String(blurHash[start..<start+2]).decode83()
-                let (r, g, b) = decodeAC(value, maximumValue: maximumValue * punch)
+                let start: Int = 4 + i * 2
+                let value: Int = String(blurHash[start..<start+2]).decode83()
+                let (r, g, b): (Float, Float, Float) = decodeAC(value, maximumValue: maximumValue * punch)
                 return SIMD3<Float>(r, g, b)
             }
         }
@@ -248,8 +250,8 @@ final class MetalBlurHashCoder {
         commandEncoder.setBuffer(pixelsBuffer, offset: 0, index: 1)
         commandEncoder.setBuffer(decodeParamsBuffer, offset: 0, index: 2)
         
-        let threadsPerThreadgroup = MTLSize(width: 16, height: 16, depth: 1)
-        let threadgroups = MTLSize(
+        let threadsPerThreadgroup: MTLSize = MTLSize(width: 16, height: 16, depth: 1)
+        let threadgroups: MTLSize = MTLSize(
             width: (width + 15) / 16,
             height: (height + 15) / 16,
             depth: 1

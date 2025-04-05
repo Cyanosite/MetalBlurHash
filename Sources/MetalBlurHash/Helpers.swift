@@ -26,7 +26,7 @@ extension BinaryInteger {
     func encode83(length: Int) -> String {
         var result: String = ""
         for i: Int in 1 ... length {
-            let digit = (Int(self) / pow(83, length - i)) % 83
+            let digit: Int = (Int(self) / pow(83, length - i)) % 83
             result += encodeCharacters[Int(digit)]
         }
         return result
@@ -48,13 +48,13 @@ extension String {
 // MARK: linear <-> sRGB
 
 func linearTosRGB(_ value: Float) -> Int {
-    let v = max(0, min(1, value))
+    let v: Float = max(0, min(1, value))
     if v <= 0.0031308 { return Int(v * 12.92 * 255 + 0.5) }
     else { return Int((1.055 * pow(v, 1 / 2.4) - 0.055) * 255 + 0.5) }
 }
 
 func sRGBToLinear<Type: BinaryInteger>(_ value: Type) -> Float {
-    let v = Float(Int64(value)) / 255
+    let v: Float = Float(Int64(value)) / 255
     if v <= 0.04045 { return v / 12.92 }
     else { return pow((v + 0.055) / 1.055, 2.4) }
 }
@@ -62,18 +62,18 @@ func sRGBToLinear<Type: BinaryInteger>(_ value: Type) -> Float {
 // MARK: DC & AC Component Encoding/Decoding
 
 func decodeDC(_ value: Int) -> (Float, Float, Float) {
-    let intR = value >> 16
-    let intG = (value >> 8) & 255
-    let intB = value & 255
+    let intR: Int = value >> 16
+    let intG: Int = (value >> 8) & 255
+    let intB: Int = value & 255
     return (sRGBToLinear(intR), sRGBToLinear(intG), sRGBToLinear(intB))
 }
 
 func decodeAC(_ value: Int, maximumValue: Float) -> (Float, Float, Float) {
-    let quantR = value / (19 * 19)
-    let quantG = (value / 19) % 19
-    let quantB = value % 19
+    let quantR: Int = value / (19 * 19)
+    let quantG: Int = (value / 19) % 19
+    let quantB: Int = value % 19
     
-    let rgb = (
+    let rgb: (Float, Float, Float) = (
         signPow((Float(quantR) - 9) / 9, 2) * maximumValue,
         signPow((Float(quantG) - 9) / 9, 2) * maximumValue,
         signPow((Float(quantB) - 9) / 9, 2) * maximumValue
@@ -83,16 +83,16 @@ func decodeAC(_ value: Int, maximumValue: Float) -> (Float, Float, Float) {
 }
 
 func encodeDC(_ value: (Float, Float, Float)) -> Int {
-    let roundedR = linearTosRGB(value.0)
-    let roundedG = linearTosRGB(value.1)
-    let roundedB = linearTosRGB(value.2)
+    let roundedR: Int = linearTosRGB(value.0)
+    let roundedG: Int = linearTosRGB(value.1)
+    let roundedB: Int = linearTosRGB(value.2)
     return (roundedR << 16) + (roundedG << 8) + roundedB
 }
 
 func encodeAC(_ value: (Float, Float, Float), maximumValue: Float) -> Int {
-    let quantR = Int(max(0, min(18, floor(signPow(value.0 / maximumValue, 0.5) * 9 + 9.5))))
-    let quantG = Int(max(0, min(18, floor(signPow(value.1 / maximumValue, 0.5) * 9 + 9.5))))
-    let quantB = Int(max(0, min(18, floor(signPow(value.2 / maximumValue, 0.5) * 9 + 9.5))))
+    let quantR: Int = Int(max(0, min(18, floor(signPow(value.0 / maximumValue, 0.5) * 9 + 9.5))))
+    let quantG: Int = Int(max(0, min(18, floor(signPow(value.1 / maximumValue, 0.5) * 9 + 9.5))))
+    let quantB: Int = Int(max(0, min(18, floor(signPow(value.2 / maximumValue, 0.5) * 9 + 9.5))))
 
     return quantR * 19 * 19 + quantG * 19 + quantB
 }
@@ -110,9 +110,9 @@ func pow(_ base: Int, _ exponent: Int) -> Int {
 // MARK: - SIMD Helpers
 
 func encodeDC(_ value: SIMD3<Float>) -> Int {
-    let roundedR = linearTosRGB(value.x)
-    let roundedG = linearTosRGB(value.y)
-    let roundedB = linearTosRGB(value.z)
+    let roundedR: Int = linearTosRGB(value.x)
+    let roundedG: Int = linearTosRGB(value.y)
+    let roundedB: Int = linearTosRGB(value.z)
     return (roundedR << 16) + (roundedG << 8) + roundedB
 }
 
@@ -142,14 +142,14 @@ extension String {
     }
 
     subscript (bounds: CountableClosedRange<Int>) -> Substring {
-        let start = index(startIndex, offsetBy: bounds.lowerBound)
-        let end = index(startIndex, offsetBy: bounds.upperBound)
+        let start: String.Index = index(startIndex, offsetBy: bounds.lowerBound)
+        let end: String.Index = index(startIndex, offsetBy: bounds.upperBound)
         return self[start...end]
     }
 
     subscript (bounds: CountableRange<Int>) -> Substring {
-        let start = index(startIndex, offsetBy: bounds.lowerBound)
-        let end = index(startIndex, offsetBy: bounds.upperBound)
+        let start: String.Index = index(startIndex, offsetBy: bounds.lowerBound)
+        let end: String.Index = index(startIndex, offsetBy: bounds.upperBound)
         return self[start..<end]
     }
 }
