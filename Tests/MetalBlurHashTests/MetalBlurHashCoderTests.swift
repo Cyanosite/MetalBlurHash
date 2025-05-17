@@ -9,28 +9,24 @@ import XCTest
 import MetalBlurHash
 
 final class MetalBlurHashCoderTests: XCTestCase {
-    static let testImage: String = "image1.jpg"
-//    static let testImage: String = "image2.png"
+    private static let performanceTestImage: String = "image1.jpg"
+    private static let testImage: String = "image2.png"
+    private static let blurHash: String = "|lM~Oi00%#Mwo}wbtRjFoeS|WDWEIoa$s.WBa#niR*X8R*bHbIawt7aeWVRjofs.R*R+axR+WBofs:ofjsofbFWBflfjogs:jsWCfQjZWCbHkCWVWVjbjtjsjsa|ayj@j[oLj[a|j?j[jZoLayWVWBayj[jtf6azWCafoL"
     
     func test_encode() {
         guard let image = UIImage(named: Self.testImage, in: Bundle.module, compatibleWith: nil) else {
-            XCTFail("Failed to load image1.jpg from the test bundle")
+            XCTFail("Failed to load \(Self.testImage) from the test bundle")
             return
         }
         
         guard let metalBlurHash: String = image.blurHash(numberOfComponents: (9, 9)) else {
-            XCTFail("Failed to encode blur hash (method: simd)")
-            return
-        }
-        
-        guard let legacyBlurHash: String = LegacyBlurHashCoder.encode(image, numberOfComponents: (9, 9)) else {
-            XCTFail("Failed to encode legacy blur hash (method: legacy)")
+            XCTFail("Failed to encode metal blur hash")
             return
         }
         
         guard
             let metalCGImage: CGImage = LegacyBlurHashCoder.decode(blurHash: metalBlurHash, size: CGSize(width: 100, height: 100), punch: 1),
-            let legacyCGImage: CGImage = LegacyBlurHashCoder.decode(blurHash: legacyBlurHash, size: CGSize(width: 100, height: 100), punch: 1)
+            let legacyCGImage: CGImage = LegacyBlurHashCoder.decode(blurHash: Self.blurHash, size: CGSize(width: 100, height: 100), punch: 1)
         else {
             XCTFail("Decode failed")
             return
@@ -47,8 +43,8 @@ final class MetalBlurHashCoderTests: XCTestCase {
     }
     
     func test_encode_performance() {
-        guard let image = UIImage(named: Self.testImage, in: Bundle.module, compatibleWith: nil) else {
-            XCTFail("Failed to load image1.jpg from the test bundle")
+        guard let image = UIImage(named: Self.performanceTestImage, in: Bundle.module, compatibleWith: nil) else {
+            XCTFail("Failed to load \(Self.performanceTestImage) from the test bundle")
             return
         }
         
@@ -61,14 +57,12 @@ final class MetalBlurHashCoderTests: XCTestCase {
     }
     
     func test_decode() {
-        let blurHash = "|lM~Oi00%#Mwo}wbtRjFoeS|WDWEIoa$s.WBa#niR*X8R*bHbIawt7aeWVRjofs.R*R+axR+WBofs:ofjsofbFWBflfjogs:jsWCfQjZWCbHkCWVWVjbjtjsjsa|ayj@j[oLj[a|j?j[jZoLayWVWBayj[jtf6azWCafoL"
-        
-        guard let metalBlurImage = UIImage(blurHash: blurHash, size: CGSize(width: 75, height: 50)) else {
+        guard let metalBlurImage = UIImage(blurHash: Self.blurHash, size: CGSize(width: 75, height: 50)) else {
             XCTFail("Failed to create image from blur hash (method: simd)")
             return
         }
         
-        guard let legacyBlurCGImage: CGImage = LegacyBlurHashCoder.decode(blurHash: blurHash, size: CGSize(width: 75, height: 50), punch: 1) else {
+        guard let legacyBlurCGImage: CGImage = LegacyBlurHashCoder.decode(blurHash: Self.blurHash, size: CGSize(width: 75, height: 50), punch: 1) else {
             XCTFail("Failed to create image from blur hash (method: legacy)")
             return
         }
@@ -78,12 +72,10 @@ final class MetalBlurHashCoderTests: XCTestCase {
     }
     
     func test_decode_performance() {
-        let blurHash = "|lM~Oi00%#Mwo}wbtRjFoeS|WDWEIoa$s.WBa#niR*X8R*bHbIawt7aeWVRjofs.R*R+axR+WBofs:ofjsofbFWBflfjogs:jsWCfQjZWCbHkCWVWVjbjtjsjsa|ayj@j[oLj[a|j?j[jZoLayWVWBayj[jtf6azWCafoL"
-        
         var blurImage: UIImage!
         
         measure {
-            guard let decodedImage = UIImage(blurHash: blurHash, size: CGSize(width: 3840, height: 2560)) else {
+            guard let decodedImage = UIImage(blurHash: Self.blurHash, size: CGSize(width: 3840, height: 2560)) else {
                 XCTFail("Failed to create image from blur hash")
                 return
             }

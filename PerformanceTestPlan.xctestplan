@@ -1,0 +1,28 @@
+{
+  "configurations" : [
+    {
+      "id" : "5FABFDD4-56B7-450B-B4D2-0884B5C06B91",
+      "name" : "Configuration 1",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "testTimeoutsEnabled" : true
+  },
+  "testTargets" : [
+    {
+      "skippedTests" : [
+        "MetalBlurHashCoderTests\/test_decode()",
+        "MetalBlurHashCoderTests\/test_encode()"
+      ],
+      "target" : {
+        "containerPath" : "container:",
+        "identifier" : "MetalBlurHashTests",
+        "name" : "MetalBlurHashTests"
+      }
+    }
+  ],
+  "version" : 1
+}

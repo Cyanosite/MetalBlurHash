@@ -28,7 +28,6 @@ public enum ImageComparisonMethod {
 }
 
 import UIKit
-import Vision
 
 protocol ImageComparison {
     /// Compares 2 images

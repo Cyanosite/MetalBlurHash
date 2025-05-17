@@ -2,12 +2,11 @@ import XCTest
 import MetalBlurHash
 
 final class LegacyBlurHashCoderTests: XCTestCase {
-    static let testImage: String = "image1.jpg"
-//    static let testImage: String = "image2.png"
+    static let performanceTestImage: String = "image1.jpg"
     
     func test_encode() {
-        guard let image = UIImage(named: Self.testImage, in: Bundle.module, compatibleWith: nil) else {
-            XCTFail("Failed to load image1.jpg from the test bundle")
+        guard let image = UIImage(named: Self.performanceTestImage, in: Bundle.module, compatibleWith: nil) else {
+            XCTFail("Failed to load \(Self.performanceTestImage) from the test bundle")
             return
         }
         
