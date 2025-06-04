@@ -5,11 +5,12 @@ MetalBlurHash is a blazing-fast Metal implementation of the popular [BlurHash](h
 By rewriting key parts of the encoding and decoding routines in Metal, encoding is up to 210× faster, and decoding is up to 250× faster compared to the CPU-based reference implementation.
 
 ## Features
+- Already in Production: **[Craft Docs](https://www.craft.do/)** takes full advantage of MetalBlurHash
 - Drop-in replacement
 - Metal-accelerated: utilizing your device’s GPU to achieve significant performance gains
 - Runs on iOS, MacCatalyst, and VisionOS
 - Enables preview generation for each and every image in your app
-- Fallback to Legacy version when Metal initialization fails
+- Works on Intel chips
 
 ## Minimum Requirements
 
@@ -17,8 +18,10 @@ By rewriting key parts of the encoding and decoding routines in Metal, encoding 
 - **MacCatalyst:** 15.0
 - **VisionOS:** 1.0
 
-> [!IMPORTANT]
-> MetalBlurHash is designed to take advantage of Apple Silicon and does not work on Intel chips.
+> [!WARNING]
+- MetalBlurHash will always return nil if Metal initialization fails
+- Placeholder generation does not work in Widgets as Command Buffer execution is not allowed from background
+`Execution of the command buffer was aborted due to an error during execution. Insufficient Permission (to submit GPU work from background) (00000006:kIOGPUCommandBufferCallbackErrorBackgroundExecutionNotPermitted)`
 
 ## Installation
 
