@@ -19,8 +19,8 @@ By rewriting key parts of the encoding and decoding routines in Metal, encoding 
 - **VisionOS:** 1.0
 
 > [!WARNING]
-- MetalBlurHash will always return nil if Metal initialization fails
-- Placeholder generation does not work in Widgets as Command Buffer execution is not allowed from background
+> MetalBlurHash will always return nil if Metal initialization fails\
+> Placeholder generation does not work in Widgets as Command Buffer execution is not allowed from background\
 `Execution of the command buffer was aborted due to an error during execution. Insufficient Permission (to submit GPU work from background) (00000006:kIOGPUCommandBufferCallbackErrorBackgroundExecutionNotPermitted)`
 
 ## Installation
